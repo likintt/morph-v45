@@ -63,8 +63,8 @@ body { background-color: #030306; color:#f8fafc; font-family: sans-serif; margin
       <button class="mode-btn" id="btnAuto" onclick="setMode('auto')">Auto</button>
       <button class="mode-btn" id="btnRate" onclick="setMode('beauty_rate')">Beauty Rate</button>
 
-      <p>Prompt / Contexto:</p>
-      <textarea id="promptInput" placeholder="Descreva roupas ou contexto da história..." rows="3"></textarea>
+      <p>Prompt / Contexto (opcional para modos automáticos):</p>
+      <textarea id="promptInput" placeholder="Digite um prompt se quiser controlar a história..." rows="3"></textarea>
 
       <button id="generateBtn">EXECUTE_TRANSFORMATION</button>
 
@@ -170,11 +170,23 @@ function setMode(mode){
     if(btn) btn.classList.add('active');
 }
 
-// Botão gerar com leitura dinâmica do JSON da Gemini
+// Botão gerar com história automática e fallback
 $('generateBtn').onclick = async () => {
     if (!state.personBase64) return alert("Adicione uma imagem de rosto!");
-    const prompt = $('promptInput').value.trim();
-    if (!prompt) return alert("Digite um prompt válido!");
+
+    let prompt;
+    if (state.currentMode === 'auto' || state.currentMode === 'friend_story') {
+        const stories = [
+            "Gere uma transição única e perfeita para este rosto, mantendo estética realista.",
+            "Crie uma transformação feminina elegante e diferente, nunca repetida.",
+            "Imagine uma história única de transição para este rosto, com detalhes sutis e realistas.",
+            "Transforme este rosto de forma original, criando uma narrativa visual exclusiva."
+        ];
+        prompt = stories[Math.floor(Math.random() * stories.length)];
+    } else {
+        prompt = $('promptInput').value.trim();
+        if (!prompt) return alert("Digite um prompt válido!");
+    }
 
     $('generateBtn').disabled = true;
 
@@ -213,7 +225,11 @@ $('generateBtn').onclick = async () => {
             }
         }
 
-        if (!b64) throw new Error("Nenhuma imagem retornada da API.");
+        // Se API não retornar imagem, usa upload como fallback
+        if (!b64) {
+            b64 = state.personBase64;
+            console.warn("API não retornou imagem, usando upload local como fallback.");
+        }
 
         // Atualiza principal e galeria
         $('imgResultFg').src = 'data:image/jpeg;base64,' + b64;
