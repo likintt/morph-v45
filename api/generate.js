@@ -4,15 +4,17 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { imageBase64, prompt } = req.body;
+        const { imageBase64, prompt, mode } = req.body;
 
         if (!imageBase64) {
             return res.status(400).json({ error: "Imagem não enviada." });
         }
 
-        // Cria prompt automático se estiver vazio
+        const apiKey = process.env.GEMINI_API_KEY;
+
+        // Gerar prompt automático se vazio ou modo automático
         let finalPrompt = prompt?.trim();
-        if (!finalPrompt) {
+        if (!finalPrompt || mode === "auto" || mode === "friend_story") {
             const stories = [
                 "Gere uma transição única e perfeita para este rosto, mantendo estética realista.",
                 "Crie uma transformação feminina elegante e diferente, nunca repetida.",
@@ -22,29 +24,22 @@ export default async function handler(req, res) {
             finalPrompt = stories[Math.floor(Math.random() * stories.length)];
         }
 
-        const apiKey = process.env.GEMINI_API_KEY;
+        const payload = {
+            contents: [{
+                parts: [
+                    { text: finalPrompt },
+                    { inlineData: { mimeType: "image/jpeg", data: imageBase64 } }
+                ]
+            }],
+            generationConfig: { responseModalities: ["IMAGE"] }
+        };
 
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: finalPrompt },
-                            {
-                                inlineData: {
-                                    mimeType: "image/jpeg",
-                                    data: imageBase64
-                                }
-                            }
-                        ]
-                    }],
-                    generationConfig: {
-                        responseModalities: ["IMAGE"]
-                    }
-                })
+                body: JSON.stringify(payload)
             }
         );
 
@@ -52,11 +47,14 @@ export default async function handler(req, res) {
 
         // Procura qualquer base64 retornado
         let imagePart = data?.candidates?.[0]?.content?.find(p => p.inlineData);
-        const imageResult = imagePart?.inlineData?.data || imageBase64; // fallback seguro
+        const imageResult = imagePart?.inlineData?.data;
 
-        if (!data?.candidates?.length) {
-            console.warn("API não retornou candidatos, usando upload como fallback.");
-        } else if (data.candidates[0].finishReason === "SAFETY") {
+        if (!imageResult) {
+            return res.status(500).json({ error: "A IA não retornou imagem. Tente novamente." });
+        }
+
+        // Verifica SAFETY
+        if (data.candidates[0].finishReason === "SAFETY") {
             return res.status(403).json({ error: "Conteúdo bloqueado por segurança." });
         }
 
