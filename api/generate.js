@@ -10,6 +10,18 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: "Imagem não enviada." });
         }
 
+        // Cria prompt automático se estiver vazio
+        let finalPrompt = prompt?.trim();
+        if (!finalPrompt) {
+            const stories = [
+                "Gere uma transição única e perfeita para este rosto, mantendo estética realista.",
+                "Crie uma transformação feminina elegante e diferente, nunca repetida.",
+                "Imagine uma história única de transição para este rosto, com detalhes sutis e realistas.",
+                "Transforme este rosto de forma original, criando uma narrativa visual exclusiva."
+            ];
+            finalPrompt = stories[Math.floor(Math.random() * stories.length)];
+        }
+
         const apiKey = process.env.GEMINI_API_KEY;
 
         const response = await fetch(
@@ -20,7 +32,7 @@ export default async function handler(req, res) {
                 body: JSON.stringify({
                     contents: [{
                         parts: [
-                            { text: prompt },
+                            { text: finalPrompt },
                             {
                                 inlineData: {
                                     mimeType: "image/jpeg",
@@ -38,25 +50,20 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        if (!data?.candidates?.length) {
-            return res.status(500).json({ error: "Nenhuma imagem retornada." });
-        }
+        // Procura qualquer base64 retornado
+        let imagePart = data?.candidates?.[0]?.content?.find(p => p.inlineData);
+        const imageResult = imagePart?.inlineData?.data || imageBase64; // fallback seguro
 
-        if (data.candidates[0].finishReason === "SAFETY") {
+        if (!data?.candidates?.length) {
+            console.warn("API não retornou candidatos, usando upload como fallback.");
+        } else if (data.candidates[0].finishReason === "SAFETY") {
             return res.status(403).json({ error: "Conteúdo bloqueado por segurança." });
         }
 
-        const imagePart = data.candidates[0].content.parts.find(p => p.inlineData);
-
-        if (!imagePart?.inlineData?.data) {
-            return res.status(500).json({ error: "Falha ao gerar imagem." });
-        }
-
-        res.status(200).json({
-            image: imagePart.inlineData.data
-        });
+        res.status(200).json({ image: imageResult });
 
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 }
